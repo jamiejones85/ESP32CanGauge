@@ -2,7 +2,7 @@
 
 ESP32 Can Bus battery gauge used in my EV conversion project.
 
-![alt text]([http://url/to/img.png](https://raw.githubusercontent.com/jamiejones85/ESP32CanGauge/main/display.jpg))
+![alt text](https://github.com/jamiejones85/ESP32CanGauge/blob/main/display.jpg?raw=true)
 ## Hardware
 
 Not finished the custom board yet, but for now I'm using:
