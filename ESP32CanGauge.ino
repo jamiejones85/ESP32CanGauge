@@ -55,13 +55,14 @@ int socAngle=100;  //.....SOC variable 0-10
 int temperature = 0;
 int current = 0;
 int voltage = 0;
+float remainingKHW = 0;
 unsigned int batMin, batMax;
 
 void setup() {
   Serial.begin(115200);
   tft.init();
 
-  tft.setRotation(1);
+  tft.setRotation(3);
   tft.fillScreen(backColor);
   sprite.createSprite(320,240);
   sprite.setSwapBytes(true);
@@ -92,10 +93,9 @@ void setup() {
   canSettings.mRxPin = GPIO_NUM_4;
   canSettings.mTxPin = GPIO_NUM_5;
 
-  //TODO:: Add filters 0x355, 0x356, 0x521, 0x373
   const ACAN_ESP32_Filter filter = ACAN_ESP32_Filter::dualStandardFilter (
-    ACAN_ESP32_Filter::data, 0x355, 0x3F, // 0x300 to 0x3FF
-    ACAN_ESP32_Filter::data, 0x521, 0x0 //exact match
+    ACAN_ESP32_Filter::data, 0x420, 0x42F, // ?
+    ACAN_ESP32_Filter::data, 0x155, 0x0 //exact match
   ) ;
   uint16_t errorCode = ACAN_ESP32::can.begin(canSettings, filter);
   if (errorCode > 0) {
@@ -121,24 +121,28 @@ void resetwdog()
 
 void handleCanFrame() {
 
-  if (inFrame.id == 0x355) {
-    socAngle =  (inFrame.data[1] << 8) + inFrame.data[0];
-  } else if (inFrame.id == 0x356) {
-    voltage = ((inFrame.data[1]<< 8) + inFrame.data[0]) / 100;
-    temperature = (inFrame.data[5]<< 8) + inFrame.data[4];
-    temperature = temperature /10;
-  } else if (inFrame.id == 0x521) {
-    int32_t milliAmps = inFrame.data[2] + (inFrame.data[3] << 8) + (inFrame.data[4] << 16) + (inFrame.data[5] << 24);
-    current = milliAmps / 1000;
+  if (inFrame.id == 0x155) {
+    socAngle = (float) ((inFrame.data[4] << 8) + inFrame.data[5]) * 0.0025;
+    voltage = (float) ((inFrame.data[6] << 8) + inFrame.data[7]) / 2;
+    int16_t rawCurrent = ((inFrame.data[1] << 8) + inFrame.data[2]) & 0xFFF;
+    rawCurrent = (float)(rawCurrent * 0.25);
+    rawCurrent = rawCurrent - 500;
+    current = rawCurrent * -1;
     if (current > 160) {
       current = 160;
     }
     if (current < -30) {
       current = -30;
     }
-  } else if (inFrame.id == 0x373) {
-    batMin = (inFrame.data[1] << 8) + inFrame.data[0];
-    batMax = (inFrame.data[3] << 8) + inFrame.data[2]; 
+  } else if (inFrame.id == 0x424) {
+     uint8_t minTempC = (uint8_t)(inFrame.data[4]) - 40;
+     uint8_t maxTempC = (uint8_t)(inFrame.data[7]) - 40;
+     temperature = (minTempC + maxTempC) / 2;
+  } else if (inFrame.id == 0x425) {
+    batMin = (((float)(((inFrame.data[6] & 0x01) << 8) + inFrame.data[7]) + 100) * 10);
+    batMax = ((float)(((inFrame.data[4] & 0x03) << 7) + ((inFrame.data[5] >> 1) + 100)) * 10);
+    remainingKHW = (float)((((inFrame.data[0] & 0x01) << 8) + inFrame.data[1]) * 0.1);
+
   }
 }
 
@@ -228,6 +232,9 @@ void draw()
   sprintf(strBuf, "%iC", temperature);
   sprite.drawString((String)strBuf,285 ,36,4);
 
+  sprintf(strBuf, "%.0f", remainingKHW);
+  sprite.drawString((String)strBuf,20 ,100,4);
+  
   sprite.setTextColor(TFT_WHITE, blockColor[3]);
 
   sprite.drawString("Min Cell",30, 185, 2);
